@@ -1,4 +1,4 @@
-# xgb2shap
+# xgbshap
 
 [![GoDoc](https://godoc.org/github.com/maxmind/xgbshap?status.png)](https://pkg.go.dev/github.com/maxmind/xgbshap)
 
