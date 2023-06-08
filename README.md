@@ -1,5 +1,7 @@
 # xgb2shap
 
+[![GoDoc](https://godoc.org/github.com/maxmind/xgbshap?status.png)](https://pkg.go.dev/github.com/maxmind/xgbshap)
+
 This is a Go package for calculating feature contributions for
 [XGBoost](https://github.com/dmlc/xgboost) models. The code is ported from
 the XGBoost C++ code. This package exists to make it possible to calculate
