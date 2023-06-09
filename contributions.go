@@ -2,7 +2,7 @@ package xgbshap
 
 // Much of this code is ported from the xgboost C++ code.
 //
-// # Copyright by XGBoost Contributors 2017-2023
+// Copyright by XGBoost Contributors 2017-2023
 //
 // xgboost's code is Apache 2.0 licensed.
 
