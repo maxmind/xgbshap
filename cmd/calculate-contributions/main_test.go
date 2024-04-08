@@ -15,7 +15,7 @@ func TestPredictContributions(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	require.Equal(t, 2, len(contributionsSets))
+	require.Len(t, contributionsSets, 2)
 
 	assert.Equal(
 		t,
