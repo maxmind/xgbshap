@@ -3,7 +3,6 @@ package xgbshap
 import (
 	"encoding/json"
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
 )
@@ -99,7 +98,7 @@ func (n *Node) MaxDepth() int {
 	leftDepth := n.Left.MaxDepth() + 1
 	rightDepth := n.Right.MaxDepth() + 1
 
-	return int(math.Max(float64(leftDepth), float64(rightDepth)))
+	return max(leftDepth, rightDepth)
 }
 
 func parseModel(
