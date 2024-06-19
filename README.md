@@ -49,7 +49,7 @@ Please report bugs by filing an issue with our GitHub issue tracker at
 
 ## Copyright and License
 
-This software is Copyright (c) 2023 by MaxMind, Inc.
+This software is Copyright (c) 2023 - 2024 by MaxMind, Inc.
 
 Much of the code is ported from the XGBoost project, so it is also
 Copyright (c) 2017-2023 by XGBoost Contributors.
