@@ -62,19 +62,19 @@ type Tree struct {
 
 // Node is a node in the Tree.
 type Node struct {
-	Data  NodeData
 	Left  *Node
 	Right *Node
+	Data  NodeData
 }
 
 // NodeData is a Node's data.
 type NodeData struct {
+	ID             int
+	SplitIndex     int
+	SplitCondition float32
+	SumHessian     float32
 	BaseWeight     float32
 	DefaultLeft    bool
-	ID             int
-	SplitCondition float32
-	SplitIndex     int
-	SumHessian     float32
 }
 
 // IsLeaf returns whether the Node is a leaf.
