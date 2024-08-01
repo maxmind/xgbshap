@@ -280,7 +280,7 @@ func treeShap(
 	isMissing := features[splitIndex] == nil // nil means missing.
 	hotIndex := getNextNode(
 		hasMissing,
-		node,
+		&node,
 		nodeIndex,
 		features[splitIndex],
 		isMissing,

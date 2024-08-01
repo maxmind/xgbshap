@@ -56,25 +56,25 @@ type TreeParam struct {
 // Tree is one tree in an XGBoost model. It's the representation we process
 // XGBTree into.
 type Tree struct {
-	Nodes    []*Node // Index 0 is the root.
+	Nodes    []Node // Index 0 is the root.
 	NumNodes int
 }
 
 // Node is a node in the Tree.
 type Node struct {
-	Data  NodeData
 	Left  *Node
 	Right *Node
+	Data  NodeData
 }
 
 // NodeData is a Node's data.
 type NodeData struct {
+	ID             int
+	SplitIndex     int
+	SplitCondition float32
+	SumHessian     float32
 	BaseWeight     float32
 	DefaultLeft    bool
-	ID             int
-	SplitCondition float32
-	SplitIndex     int
-	SumHessian     float32
 }
 
 // IsLeaf returns whether the Node is a leaf.
@@ -136,11 +136,7 @@ func parseTree(
 		return nil, fmt.Errorf("getting num nodes as int64: %w", err)
 	}
 
-	var nodes []*Node
-	for i := 0; i < int(numNodes); i++ {
-		nodes = append(nodes, &Node{})
-	}
-
+	nodes := make([]Node, numNodes)
 	for i := 0; i < int(numNodes); i++ {
 		nodes[i].Data = NodeData{
 			BaseWeight:     xt.BaseWeights[i],
@@ -158,8 +154,8 @@ func parseTree(
 			continue
 		}
 
-		nodes[i].Left = nodes[left]
-		nodes[i].Right = nodes[right]
+		nodes[i].Left = &nodes[left]
+		nodes[i].Right = &nodes[right]
 	}
 
 	return &Tree{
