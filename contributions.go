@@ -76,7 +76,7 @@ func predictContributions(
 
 	// Initialize tree node mean values.
 	meanValues := make([][]float32, ntreeLimit)
-	for i := 0; i < ntreeLimit; i++ {
+	for i := range ntreeLimit {
 		meanValues[i] = make([]float32, trees[i].NumNodes)
 
 		nodeIndex := 0
@@ -93,7 +93,7 @@ func predictContributions(
 
 	// If ngroup was not 1, then we'd need an additional loop here.
 
-	for i := 0; i < ntreeLimit; i++ {
+	for i := range ntreeLimit {
 		treeMeanValues := meanValues[i]
 
 		treeContribs := make([]float32, nColumns)
@@ -114,7 +114,7 @@ func predictContributions(
 			return nil, err
 		}
 
-		for ci := 0; ci < nColumns; ci++ {
+		for ci := range nColumns {
 			// tree_weights is null in my testing, so I'm ignoring it.
 			contribs[ci] += treeContribs[ci]
 		}

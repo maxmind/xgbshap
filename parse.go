@@ -137,11 +137,11 @@ func parseTree(
 	}
 
 	nodes := make([]Node, numNodes)
-	for i := 0; i < int(numNodes); i++ {
+	for i := range numNodes {
 		nodes[i].Data = NodeData{
 			BaseWeight:     xt.BaseWeights[i],
 			DefaultLeft:    xt.DefaultLeft[i] == 1,
-			ID:             i,
+			ID:             int(i),
 			SplitCondition: xt.SplitConditions[i],
 			SplitIndex:     xt.SplitIndices[i],
 			SumHessian:     xt.SumHessian[i],

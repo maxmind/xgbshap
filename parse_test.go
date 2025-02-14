@@ -7,7 +7,7 @@ import (
 )
 
 func BenchmarkParseModel(b *testing.B) {
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_, _, err := parseModel("testdata/small-model/model.json")
 		require.NoError(b, err)
 	}
