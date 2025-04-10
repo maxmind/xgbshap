@@ -31,7 +31,6 @@ func main() {
 	ntreeLimit := flag.Int(
 		"ntree-limit",
 		0,
-		//nolint:lll
 		"ntree limit to use. Newer model files have this included, so it is optional for those. Others are set in meta.json. Provide it here if necessary or to override",
 	)
 
