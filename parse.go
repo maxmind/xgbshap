@@ -28,6 +28,7 @@ type Learner struct {
 // Attributes holds attributes from an XGBoost model.
 type Attributes struct {
 	BestNtreeLimit json.Number `json:"best_ntree_limit"`
+	BestIteration  json.Number `json:"best_iteration"`
 }
 
 // GradientBooster holds the XGBoost model.

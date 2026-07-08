@@ -51,12 +51,27 @@ func NewPredictor(
 	}
 
 	if o.ntreeLimit == 0 {
-		ntreeLimit64, err := xgbModel.Learner.Attributes.BestNtreeLimit.Int64()
-		if err != nil {
-			return nil, fmt.Errorf("getting best ntree limit as int64: %w", err)
+		attrs := xgbModel.Learner.Attributes
+		switch {
+		case attrs.BestNtreeLimit != "":
+			// Older XGBoost versions store best_ntree_limit directly.
+			n, err := attrs.BestNtreeLimit.Int64()
+			if err != nil {
+				return nil, fmt.Errorf("parsing best_ntree_limit: %w", err)
+			}
+			o.ntreeLimit = int(n)
+		case attrs.BestIteration != "":
+			// Newer XGBoost versions store best_iteration (0-based); the
+			// number of trees to use is best_iteration + 1.
+			n, err := attrs.BestIteration.Int64()
+			if err != nil {
+				return nil, fmt.Errorf("parsing best_iteration: %w", err)
+			}
+			o.ntreeLimit = int(n) + 1
+		default:
+			// No early stopping attribute; use all trees.
+			o.ntreeLimit = len(trees)
 		}
-
-		o.ntreeLimit = int(ntreeLimit64)
 	}
 
 	return &Predictor{

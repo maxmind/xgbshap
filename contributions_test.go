@@ -1,6 +1,11 @@
 package xgbshap
 
 import (
+	"encoding/csv"
+	"fmt"
+	"math"
+	"os"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -142,6 +147,108 @@ func TestPredictContributionsNegInfSplit(t *testing.T) {
 		// contribution=-5, bias=15; sum = 10 = left leaf.
 		assert.Equal(t, []float32{-5.0}, contributions[:len(contributions)-1])
 	})
+}
+
+func TestPredictContributionsRoundtrip(t *testing.T) {
+	p, err := NewPredictor("testdata/roundtrip/model.json")
+	require.NoError(t, err)
+
+	allFeatures, err := readFeaturesCSV("testdata/roundtrip/features.csv")
+	require.NoError(t, err)
+
+	allContribs, err := readContributionsCSV("testdata/roundtrip/contributions.csv")
+	require.NoError(t, err)
+
+	require.Equal(t, len(allFeatures), len(allContribs), "feature and contribution row counts must match")
+
+	const tolerance = 1e-5
+
+	for row, features := range allFeatures {
+		got, err := p.PredictContributions(features)
+		require.NoError(t, err)
+
+		expected := allContribs[row]
+
+		// The last element is the bias. xgbshap does not yet add base_score
+		// to it, so it will differ from XGBoost's output. Skip it.
+		nFeatures := len(features)
+		require.Equal(t, nFeatures+1, len(got), "row %d: unexpected contribution length", row)
+		require.Equal(t, nFeatures+1, len(expected), "row %d: unexpected golden length", row)
+
+		for col := range nFeatures {
+			absDelta := math.Abs(float64(got[col] - expected[col]))
+			relDelta := absDelta / math.Max(math.Abs(float64(expected[col])), 1.0)
+
+			if relDelta > tolerance && absDelta > tolerance {
+				t.Errorf(
+					"row %d, feature %d: got %g, want %g (absDelta=%g, relDelta=%g)",
+					row, col, got[col], expected[col], absDelta, relDelta,
+				)
+			}
+		}
+	}
+}
+
+func readFeaturesCSV(path string) ([][]*float32, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	r := csv.NewReader(f)
+	records, err := r.ReadAll()
+	if err != nil {
+		return nil, err
+	}
+
+	rows := make([][]*float32, len(records))
+	for i, record := range records {
+		row := make([]*float32, len(record))
+		for j, cell := range record {
+			if cell == "" {
+				continue // nil means missing
+			}
+			v, err := strconv.ParseFloat(cell, 32)
+			if err != nil {
+				return nil, fmt.Errorf("row %d col %d: %w", i, j, err)
+			}
+			f32 := float32(v)
+			row[j] = &f32
+		}
+		rows[i] = row
+	}
+
+	return rows, nil
+}
+
+func readContributionsCSV(path string) ([][]float32, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	r := csv.NewReader(f)
+	records, err := r.ReadAll()
+	if err != nil {
+		return nil, err
+	}
+
+	rows := make([][]float32, len(records))
+	for i, record := range records {
+		row := make([]float32, len(record))
+		for j, cell := range record {
+			v, err := strconv.ParseFloat(cell, 32)
+			if err != nil {
+				return nil, fmt.Errorf("row %d col %d: %w", i, j, err)
+			}
+			row[j] = float32(v)
+		}
+		rows[i] = row
+	}
+
+	return rows, nil
 }
 
 func toPtr(f float32) *float32 { return &f }
