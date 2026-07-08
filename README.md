@@ -19,7 +19,6 @@ In particular, we have not yet ported:
 - Code involving condition and condition_features
 - Code involving tree weights
 - Some of the code involving the bias
-- Code involving categories
 
 It is also possible that XGBoost's code has changed since this code was written.
 We will be attempting to keep this implementation up to date.
