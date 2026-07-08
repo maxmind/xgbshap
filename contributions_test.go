@@ -86,4 +86,29 @@ func TestPredictContributions(t *testing.T) {
 	)
 }
 
+func TestPredictContributionsNegInfSplit(t *testing.T) {
+	// This model has a single tree whose root splits on feature 0 at -Infinity
+	// with default_left=1. That means missing values route left (base_weight=10)
+	// and all present values route right (base_weight=20). With equal hessians
+	// (1, 1) the mean value is 15.
+	p, err := NewPredictor("testdata/neg-inf-split/model.json")
+	require.NoError(t, err)
+
+	t.Run("present feature routes right", func(t *testing.T) {
+		contributions, err := p.PredictContributions([]*float32{toPtr(5.0)})
+		require.NoError(t, err)
+
+		// contribution=5, bias=15; sum = 20 = right leaf.
+		assert.Equal(t, []float32{5.0}, contributions[:len(contributions)-1])
+	})
+
+	t.Run("missing feature routes left", func(t *testing.T) {
+		contributions, err := p.PredictContributions([]*float32{nil})
+		require.NoError(t, err)
+
+		// contribution=-5, bias=15; sum = 10 = left leaf.
+		assert.Equal(t, []float32{-5.0}, contributions[:len(contributions)-1])
+	})
+}
+
 func toPtr(f float32) *float32 { return &f }
