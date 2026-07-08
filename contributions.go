@@ -458,9 +458,16 @@ func getNextNode(
 		return node.Right.Data.ID
 	}
 
-	// As I mention above, we don't currently need the "cats" (categories)
-	// parameter. From what I can tell, it is not set in the models we use, at
-	// least what I am testing with.
+	if node.Data.Categorical {
+		// Categories contains the values that route to the right child.
+		val := int(*featureValue)
+		for _, cat := range node.Data.Categories {
+			if cat == val {
+				return node.Right.Data.ID
+			}
+		}
+		return node.Left.Data.ID
+	}
 
 	nextNodeIndex := node.Left.Data.ID
 	if !(*featureValue < node.Data.SplitCondition) {

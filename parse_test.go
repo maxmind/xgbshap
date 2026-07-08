@@ -101,22 +101,157 @@ func TestParseModelNegInfSplit(t *testing.T) {
 	assert.Equal(t, float32(20.0), root.Right.Data.BaseWeight)
 }
 
+func TestParseModelCategorical(t *testing.T) {
+	_, trees, err := parseModel("testdata/categorical/model.json")
+	require.NoError(t, err)
+
+	require.Len(t, trees, 1)
+
+	root := trees[0].Nodes[0]
+	assert.True(t, root.Data.Categorical)
+	assert.Equal(t, []int{1, 3}, root.Data.Categories)
+	assert.True(t, root.Data.DefaultLeft)
+	assert.Equal(t, float32(10.0), root.Left.Data.BaseWeight)
+	assert.Equal(t, float32(30.0), root.Right.Data.BaseWeight)
+
+	// Leaf nodes must not be marked categorical.
+	assert.False(t, root.Left.Data.Categorical)
+	assert.False(t, root.Right.Data.Categorical)
+}
+
+func TestCategorySets(t *testing.T) {
+	// baseTree is a valid two-categorical-node tree the error cases mutate.
+	baseTree := func() XGBTree {
+		xt := XGBTree{
+			SplitType:          []int{1, 1, 0},
+			Categories:         []int{0, 2, 1, 3, 4},
+			CategoriesNodes:    []int{0, 1},
+			CategoriesSegments: []int{0, 2},
+			CategoriesSizes:    []int{2, 3},
+		}
+		xt.TreeParam.NumNodes = "3"
+		return xt
+	}
+
+	t.Run("valid decoding", func(t *testing.T) {
+		sets, err := categorySets(baseTree(), 3)
+		require.NoError(t, err)
+		assert.Equal(
+			t,
+			map[int][]int{0: {0, 2}, 1: {1, 3, 4}},
+			sets,
+		)
+	})
+
+	t.Run("no categorical splits returns empty", func(t *testing.T) {
+		xt := XGBTree{SplitType: []int{0, 0, 0}}
+		xt.TreeParam.NumNodes = "3"
+		sets, err := categorySets(xt, 3)
+		require.NoError(t, err)
+		assert.Empty(t, sets)
+	})
+
+	tests := []struct {
+		name   string
+		mutate func(xt *XGBTree)
+	}{
+		{
+			name: "mismatched segment length",
+			mutate: func(xt *XGBTree) {
+				xt.CategoriesSegments = []int{0}
+			},
+		},
+		{
+			name: "mismatched size length",
+			mutate: func(xt *XGBTree) {
+				xt.CategoriesSizes = []int{2}
+			},
+		},
+		{
+			name: "segment out of range",
+			mutate: func(xt *XGBTree) {
+				xt.CategoriesSizes = []int{2, 99}
+			},
+		},
+		{
+			name: "negative segment start",
+			mutate: func(xt *XGBTree) {
+				xt.CategoriesSegments = []int{-1, 2}
+			},
+		},
+		{
+			name: "split_type length mismatch",
+			mutate: func(xt *XGBTree) {
+				xt.SplitType = []int{1, 1}
+			},
+		},
+		{
+			name: "split_type categorical but no set",
+			mutate: func(xt *XGBTree) {
+				xt.SplitType = []int{1, 1, 1}
+			},
+		},
+		{
+			name: "set present but split_type numeric",
+			mutate: func(xt *XGBTree) {
+				xt.SplitType = []int{0, 1, 0}
+			},
+		},
+		{
+			name: "node ID out of range",
+			mutate: func(xt *XGBTree) {
+				xt.CategoriesNodes = []int{0, 99}
+			},
+		},
+		{
+			name: "negative node ID",
+			mutate: func(xt *XGBTree) {
+				xt.CategoriesNodes = []int{0, -1}
+			},
+		},
+		{
+			name: "categorical data but no split_type",
+			mutate: func(xt *XGBTree) {
+				xt.SplitType = nil
+			},
+		},
+		{
+			name: "unsupported split_type value",
+			mutate: func(xt *XGBTree) {
+				xt.SplitType = []int{2, 1, 0}
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			xt := baseTree()
+			test.mutate(&xt)
+			_, err := categorySets(xt, 3)
+			require.Error(t, err)
+		})
+	}
+}
+
 func TestCheckSplitCondition(t *testing.T) {
 	t.Run("finite threshold accepted", func(t *testing.T) {
-		require.NoError(t, checkSplitCondition(0, 1.5, false))
+		require.NoError(t, checkSplitCondition(0, 1.5, false, false))
 	})
 	t.Run("negative infinity accepted", func(t *testing.T) {
-		require.NoError(t, checkSplitCondition(0, float32(math.Inf(-1)), false))
+		require.NoError(t, checkSplitCondition(0, float32(math.Inf(-1)), false, false))
 	})
 	t.Run("positive infinity rejected", func(t *testing.T) {
-		require.Error(t, checkSplitCondition(0, float32(math.Inf(1)), false))
+		require.Error(t, checkSplitCondition(0, float32(math.Inf(1)), false, false))
 	})
 	t.Run("NaN rejected", func(t *testing.T) {
-		require.Error(t, checkSplitCondition(0, float32(math.NaN()), false))
+		require.Error(t, checkSplitCondition(0, float32(math.NaN()), false, false))
 	})
 	t.Run("leaf nodes skip validation", func(t *testing.T) {
-		require.NoError(t, checkSplitCondition(0, float32(math.NaN()), true))
-		require.NoError(t, checkSplitCondition(0, float32(math.Inf(1)), true))
+		require.NoError(t, checkSplitCondition(0, float32(math.NaN()), false, true))
+		require.NoError(t, checkSplitCondition(0, float32(math.Inf(1)), false, true))
+	})
+	t.Run("categorical nodes skip threshold validation", func(t *testing.T) {
+		require.NoError(t, checkSplitCondition(0, float32(math.NaN()), true, false))
+		require.NoError(t, checkSplitCondition(0, float32(math.Inf(1)), true, false))
 	})
 }
 

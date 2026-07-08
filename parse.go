@@ -3,6 +3,7 @@ package xgbshap
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -49,6 +50,18 @@ type XGBTree struct {
 	SplitIndices    []int     `json:"split_indices"`
 	SumHessian      []float32 `json:"sum_hessian"`
 	TreeParam       TreeParam `json:"tree_param"`
+	// SplitType marks each node's split kind: 0 = numeric, 1 = categorical. It
+	// is absent in models trained without categorical features, in which case
+	// every split is numeric.
+	SplitType []int `json:"split_type"`
+	// The fields below describe categorical splits. Categories is the flattened
+	// list of category values across all categorical nodes; for each entry k in
+	// CategoriesNodes (a node ID), the values that route to that node's right
+	// child are Categories[CategoriesSegments[k] : CategoriesSegments[k]+CategoriesSizes[k]].
+	Categories         []int `json:"categories"`
+	CategoriesNodes    []int `json:"categories_nodes"`
+	CategoriesSegments []int `json:"categories_segments"`
+	CategoriesSizes    []int `json:"categories_sizes"`
 }
 
 // TreeParam holds tree parameters.
@@ -108,6 +121,11 @@ type NodeData struct {
 	SumHessian     float32
 	BaseWeight     float32
 	DefaultLeft    bool
+	// Categorical reports whether this is a categorical split. When true,
+	// Categories holds the category values that route to the right child and
+	// SplitCondition is unused (XGBoost stores a dummy threshold there).
+	Categorical bool
+	Categories  []int
 }
 
 // IsLeaf returns whether the Node is a leaf.
@@ -200,13 +218,19 @@ func sanitizeNonFiniteNumbers(data []byte) []byte {
 	return out
 }
 
-// checkSplitCondition validates a decision node's split threshold. A -Infinity
-// threshold is accepted: it represents a "missingness split" from XGBoost's
-// histogram-based split finder (the hist tree method) that routes purely on
-// whether the feature is missing. All other non-finite values are rejected
-// because they have no well-defined routing semantics.
-func checkSplitCondition(id int, sc float32, isLeaf bool) error {
+// checkSplitCondition validates a node's split_conditions value. The value is a
+// numeric threshold for a numeric decision node, a leaf's output value for a
+// leaf, and a dummy (ignored) value for a categorical node. A -Infinity
+// threshold on a numeric decision node is accepted: it represents a
+// "missingness split" from XGBoost's histogram-based split finder that routes
+// purely on whether the feature is missing. All other non-finite values are
+// rejected because they have no well-defined routing semantics.
+func checkSplitCondition(id int, sc float32, categorical, isLeaf bool) error {
 	if isLeaf {
+		return nil
+	}
+	if categorical {
+		// The value is a dummy for categorical nodes and is never used.
 		return nil
 	}
 	if math.IsInf(float64(sc), -1) {
@@ -221,6 +245,116 @@ func checkSplitCondition(id int, sc float32, isLeaf bool) error {
 		)
 	}
 	return nil
+}
+
+// categorySets maps each categorical node's ID to the category values that
+// route to its right child, decoding XGBoost's flattened categories/segments/
+// sizes representation. It returns an empty map for models trained without
+// categorical features. It validates the arrays rather than trusting them: a
+// malformed or inconsistent encoding would otherwise cause a categorical node
+// to be silently treated as a numeric split on its dummy threshold, producing
+// wrong contributions.
+//
+// This is the same logic as categorySets in xgb2code's parse.go.
+func categorySets(xt XGBTree, numNodes int64) (map[int][]int, error) {
+	n := len(xt.CategoriesNodes)
+	if len(xt.CategoriesSegments) != n || len(xt.CategoriesSizes) != n {
+		return nil, fmt.Errorf(
+			"inconsistent categorical arrays: categories_nodes=%d, "+
+				"categories_segments=%d, categories_sizes=%d",
+			n,
+			len(xt.CategoriesSegments),
+			len(xt.CategoriesSizes),
+		)
+	}
+
+	sets := make(map[int][]int, n)
+	for k := range n {
+		start := xt.CategoriesSegments[k]
+		size := xt.CategoriesSizes[k]
+		if start < 0 || size < 0 || start > len(xt.Categories)-size {
+			return nil, fmt.Errorf(
+				"categorical segment [%d:%d+%d] out of range for "+
+					"categories of length %d",
+				start,
+				start,
+				size,
+				len(xt.Categories),
+			)
+		}
+		nodeID := xt.CategoriesNodes[k]
+		if nodeID < 0 || int64(nodeID) >= numNodes {
+			return nil, fmt.Errorf(
+				"categories_nodes[%d] = %d out of range for num_nodes %d",
+				k,
+				nodeID,
+				numNodes,
+			)
+		}
+		cats := make([]int, size)
+		copy(cats, xt.Categories[start:start+size])
+		sets[nodeID] = cats
+	}
+
+	// split_type is the only independent signal of which nodes are categorical,
+	// so it is what lets us verify that every categorical node was decoded.
+	// Without it we cannot make that check, and a categorical node missing from
+	// categories_nodes would be silently treated as a numeric split on its dummy
+	// threshold. Real XGBoost models always include split_type when they have
+	// categorical data, so reject categorical data that lacks it rather than
+	// risk wrong contributions.
+	if len(xt.SplitType) == 0 {
+		if len(sets) > 0 {
+			return nil, errors.New(
+				"model has categorical data (categories_nodes) but no split_type",
+			)
+		}
+		return sets, nil
+	}
+
+	if int64(len(xt.SplitType)) != numNodes {
+		return nil, fmt.Errorf(
+			"split_type length %d does not match num_nodes %d",
+			len(xt.SplitType),
+			numNodes,
+		)
+	}
+
+	// Every node that split_type marks as categorical must have a decoded set,
+	// and vice versa; a mismatch means we would treat a node as the wrong split
+	// kind. Any split_type other than 0 (numeric) or 1 (categorical) is an
+	// encoding we do not understand, so reject it rather than defaulting it to
+	// numeric.
+	for i := range numNodes {
+		switch xt.SplitType[i] {
+		case 0, 1:
+		default:
+			return nil, fmt.Errorf(
+				"node %d has unsupported split_type %d",
+				i,
+				xt.SplitType[i],
+			)
+		}
+		_, hasSet := sets[int(i)]
+		isCategorical := xt.SplitType[i] == 1
+		if hasSet != isCategorical {
+			return nil, fmt.Errorf(
+				"node %d has split_type %d but %s in categories_nodes",
+				i,
+				xt.SplitType[i],
+				presence(hasSet),
+			)
+		}
+	}
+
+	return sets, nil
+}
+
+func presence(present bool) string {
+	if present {
+		return "is present"
+	}
+	return "is absent"
 }
 
 func parseModel(
@@ -258,14 +392,20 @@ func parseTree(
 		return nil, fmt.Errorf("getting num nodes as int64: %w", err)
 	}
 
+	categories, err := categorySets(xt, numNodes)
+	if err != nil {
+		return nil, err
+	}
+
 	nodes := make([]Node, numNodes)
 	for i := range numNodes {
+		cats, categorical := categories[int(i)]
 		sc := float32(xt.SplitConditions[i])
 
 		left := xt.LeftChildren[i]
 		isLeaf := left == -1
 
-		if err := checkSplitCondition(int(i), sc, isLeaf); err != nil {
+		if err := checkSplitCondition(int(i), sc, categorical, isLeaf); err != nil {
 			return nil, err
 		}
 
@@ -276,6 +416,8 @@ func parseTree(
 			SplitCondition: sc,
 			SplitIndex:     xt.SplitIndices[i],
 			SumHessian:     xt.SumHessian[i],
+			Categorical:    categorical,
+			Categories:     cats,
 		}
 
 		right := xt.RightChildren[i]

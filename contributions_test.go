@@ -86,6 +86,39 @@ func TestPredictContributions(t *testing.T) {
 	)
 }
 
+func TestPredictContributionsCategorical(t *testing.T) {
+	// This model has a single tree whose root is a categorical split on
+	// feature 0 with categories {1, 3} routing right and default_left=1.
+	// Left leaf base_weight=10, right leaf base_weight=30, equal hessians
+	// (1, 1), so the mean value is 20.
+	p, err := NewPredictor("testdata/categorical/model.json")
+	require.NoError(t, err)
+
+	t.Run("in-set value routes right", func(t *testing.T) {
+		contributions, err := p.PredictContributions([]*float32{toPtr(1.0)})
+		require.NoError(t, err)
+
+		// contribution=10, bias=20; sum = 30 = right leaf.
+		assert.Equal(t, []float32{10.0}, contributions[:len(contributions)-1])
+	})
+
+	t.Run("not-in-set value routes left", func(t *testing.T) {
+		contributions, err := p.PredictContributions([]*float32{toPtr(2.0)})
+		require.NoError(t, err)
+
+		// contribution=-10, bias=20; sum = 10 = left leaf.
+		assert.Equal(t, []float32{-10.0}, contributions[:len(contributions)-1])
+	})
+
+	t.Run("missing feature routes left via default_left", func(t *testing.T) {
+		contributions, err := p.PredictContributions([]*float32{nil})
+		require.NoError(t, err)
+
+		// contribution=-10, bias=20; sum = 10 = left leaf.
+		assert.Equal(t, []float32{-10.0}, contributions[:len(contributions)-1])
+	})
+}
+
 func TestPredictContributionsNegInfSplit(t *testing.T) {
 	// This model has a single tree whose root splits on feature 0 at -Infinity
 	// with default_left=1. That means missing values route left (base_weight=10)
