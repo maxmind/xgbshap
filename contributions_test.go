@@ -159,7 +159,12 @@ func TestPredictContributionsRoundtrip(t *testing.T) {
 	allContribs, err := readContributionsCSV("testdata/roundtrip/contributions.csv")
 	require.NoError(t, err)
 
-	require.Equal(t, len(allFeatures), len(allContribs), "feature and contribution row counts must match")
+	require.Len(
+		t,
+		allContribs,
+		len(allFeatures),
+		"feature and contribution row counts must match",
+	)
 
 	const tolerance = 1e-5
 
@@ -172,8 +177,8 @@ func TestPredictContributionsRoundtrip(t *testing.T) {
 		// The last element is the bias. xgbshap does not yet add base_score
 		// to it, so it will differ from XGBoost's output. Skip it.
 		nFeatures := len(features)
-		require.Equal(t, nFeatures+1, len(got), "row %d: unexpected contribution length", row)
-		require.Equal(t, nFeatures+1, len(expected), "row %d: unexpected golden length", row)
+		require.Len(t, got, nFeatures+1, "row %d: unexpected contribution length", row)
+		require.Len(t, expected, nFeatures+1, "row %d: unexpected golden length", row)
 
 		for col := range nFeatures {
 			absDelta := math.Abs(float64(got[col] - expected[col]))
@@ -190,7 +195,7 @@ func TestPredictContributionsRoundtrip(t *testing.T) {
 }
 
 func readFeaturesCSV(path string) ([][]*float32, error) {
-	f, err := os.Open(path)
+	f, err := os.Open(path) //nolint:gosec // path is a test fixture, not user input
 	if err != nil {
 		return nil, err
 	}
@@ -223,7 +228,7 @@ func readFeaturesCSV(path string) ([][]*float32, error) {
 }
 
 func readContributionsCSV(path string) ([][]float32, error) {
-	f, err := os.Open(path)
+	f, err := os.Open(path) //nolint:gosec // path is a test fixture, not user input
 	if err != nil {
 		return nil, err
 	}

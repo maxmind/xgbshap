@@ -51,26 +51,12 @@ func NewPredictor(
 	}
 
 	if o.ntreeLimit == 0 {
-		attrs := xgbModel.Learner.Attributes
-		switch {
-		case attrs.BestNtreeLimit != "":
-			// Older XGBoost versions store best_ntree_limit directly.
-			n, err := attrs.BestNtreeLimit.Int64()
-			if err != nil {
-				return nil, fmt.Errorf("parsing best_ntree_limit: %w", err)
-			}
-			o.ntreeLimit = int(n)
-		case attrs.BestIteration != "":
-			// Newer XGBoost versions store best_iteration (0-based); the
-			// number of trees to use is best_iteration + 1.
-			n, err := attrs.BestIteration.Int64()
-			if err != nil {
-				return nil, fmt.Errorf("parsing best_iteration: %w", err)
-			}
-			o.ntreeLimit = int(n) + 1
-		default:
-			// No early stopping attribute; use all trees.
-			o.ntreeLimit = len(trees)
+		o.ntreeLimit, err = resolveNtreeLimit(
+			xgbModel.Learner.Attributes,
+			len(trees),
+		)
+		if err != nil {
+			return nil, err
 		}
 	}
 
@@ -78,4 +64,29 @@ func NewPredictor(
 		ntreeLimit: o.ntreeLimit,
 		trees:      trees,
 	}, nil
+}
+
+// resolveNtreeLimit determines how many trees to use when the caller has not
+// set an explicit limit. Older XGBoost versions store best_ntree_limit
+// directly; newer ones store best_iteration (0-based), so the number of trees
+// to use is best_iteration + 1. When neither attribute is present there was no
+// early stopping, so all trees are used. best_ntree_limit takes precedence when
+// both are present.
+func resolveNtreeLimit(attrs Attributes, numTrees int) (int, error) {
+	switch {
+	case attrs.BestNtreeLimit != "":
+		n, err := attrs.BestNtreeLimit.Int64()
+		if err != nil {
+			return 0, fmt.Errorf("parsing best_ntree_limit: %w", err)
+		}
+		return int(n), nil
+	case attrs.BestIteration != "":
+		n, err := attrs.BestIteration.Int64()
+		if err != nil {
+			return 0, fmt.Errorf("parsing best_iteration: %w", err)
+		}
+		return int(n) + 1, nil
+	default:
+		return numTrees, nil
+	}
 }

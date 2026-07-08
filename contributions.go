@@ -8,6 +8,7 @@ package xgbshap
 
 import (
 	"fmt"
+	"slices"
 )
 
 // PredictContributions calculates the contributions of features.
@@ -271,11 +272,6 @@ func treeShap(
 
 	// find which branch is "hot" (meaning x would follow it)
 
-	// The GetCategoriesMatrix call is apparently not used, at least in the model
-	// I'm testing with. I think it is related to the categories field in the
-	// JSON model. We always hit the false branch for the code involving it in
-	// GetNextNode(). I'm omitting it for now.
-
 	hasMissing := true                       // We always can have missing values.
 	isMissing := features[splitIndex] == nil // nil means missing.
 	hotIndex := getNextNode(
@@ -460,11 +456,8 @@ func getNextNode(
 
 	if node.Data.Categorical {
 		// Categories contains the values that route to the right child.
-		val := int(*featureValue)
-		for _, cat := range node.Data.Categories {
-			if cat == val {
-				return node.Right.Data.ID
-			}
+		if slices.Contains(node.Data.Categories, int(*featureValue)) {
+			return node.Right.Data.ID
 		}
 		return node.Left.Data.ID
 	}

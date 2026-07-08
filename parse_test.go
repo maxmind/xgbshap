@@ -97,8 +97,8 @@ func TestParseModelNegInfSplit(t *testing.T) {
 		"root split condition should be -Infinity",
 	)
 	assert.True(t, root.Data.DefaultLeft)
-	assert.Equal(t, float32(10.0), root.Left.Data.BaseWeight)
-	assert.Equal(t, float32(20.0), root.Right.Data.BaseWeight)
+	assert.InDelta(t, float32(10.0), root.Left.Data.BaseWeight, 1e-6)
+	assert.InDelta(t, float32(20.0), root.Right.Data.BaseWeight, 1e-6)
 }
 
 func TestParseModelCategorical(t *testing.T) {
@@ -111,8 +111,8 @@ func TestParseModelCategorical(t *testing.T) {
 	assert.True(t, root.Data.Categorical)
 	assert.Equal(t, []int{1, 3}, root.Data.Categories)
 	assert.True(t, root.Data.DefaultLeft)
-	assert.Equal(t, float32(10.0), root.Left.Data.BaseWeight)
-	assert.Equal(t, float32(30.0), root.Right.Data.BaseWeight)
+	assert.InDelta(t, float32(10.0), root.Left.Data.BaseWeight, 1e-6)
+	assert.InDelta(t, float32(30.0), root.Right.Data.BaseWeight, 1e-6)
 
 	// Leaf nodes must not be marked categorical.
 	assert.False(t, root.Left.Data.Categorical)

@@ -43,14 +43,14 @@ type Model struct {
 
 // XGBTree is one tree in an XGBoost model as decoded from JSON.
 type XGBTree struct {
-	BaseWeights     []float32 `json:"base_weights"`
-	DefaultLeft     []int     `json:"default_left"`
-	LeftChildren    []int     `json:"left_children"`
-	RightChildren   []int     `json:"right_children"`
+	BaseWeights     []float32  `json:"base_weights"`
+	DefaultLeft     []int      `json:"default_left"`
+	LeftChildren    []int      `json:"left_children"`
+	RightChildren   []int      `json:"right_children"`
 	SplitConditions []xgbFloat `json:"split_conditions"`
-	SplitIndices    []int     `json:"split_indices"`
-	SumHessian      []float32 `json:"sum_hessian"`
-	TreeParam       TreeParam `json:"tree_param"`
+	SplitIndices    []int      `json:"split_indices"`
+	SumHessian      []float32  `json:"sum_hessian"`
+	TreeParam       TreeParam  `json:"tree_param"`
 	// SplitType marks each node's split kind: 0 = numeric, 1 = categorical. It
 	// is absent in models trained without categorical features, in which case
 	// every split is numeric.
@@ -404,6 +404,7 @@ func parseTree(
 		sc := float32(xt.SplitConditions[i])
 
 		left := xt.LeftChildren[i]
+		right := xt.RightChildren[i]
 		isLeaf := left == -1
 
 		if err := checkSplitCondition(int(i), sc, categorical, isLeaf); err != nil {
@@ -420,8 +421,6 @@ func parseTree(
 			Categorical:    categorical,
 			Categories:     cats,
 		}
-
-		right := xt.RightChildren[i]
 
 		if isLeaf {
 			continue
